@@ -27,7 +27,9 @@ check_changes() {
 
   git diff --quiet --exit-code || output="${output}  > there are unstaged changes\n"
   git diff --quiet --cached --exit-code || output="${output}  > there are staged changes\n"
-
+  if [[ $(git ls-files --others --exclude-standard | wc -l) -gt 0 ]]; then
+    output="${output}  > there are unadded files\n"
+  fi
 
   if [[ -n "$output" ]]; then
     echo "$dir"
