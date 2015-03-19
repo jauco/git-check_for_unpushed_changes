@@ -1,0 +1,68 @@
+
+check_changes() {
+  dir="$(dirname "$1")"
+  pushd "$dir" > /dev/null
+  if [ -n "$canupdate" ]; then
+    git fetch --all -q
+  fi
+
+  output=$(git for-each-ref --format="%(refname:short) %(upstream:short)" refs/heads |
+     while read local remote; do
+      # to do this should be:
+      if [[ $(git branch -a --contains ${local}  | grep '^  remotes' | wc -l) -eq 0 ]]; then
+        if [[ -n "$remote" ]]; then
+          echo "  > $local is ahead of $remote"
+        else
+          echo "  > $local is not merged into any remote"
+        fi
+      fi
+    done)
+
+
+  if [[ -n "$output" ]]; then
+    output="${output}\n"
+  fi
+
+  git stash list | grep -q '.\+' && output="${output}  > there are stashed changes\n"
+
+  git diff --quiet --exit-code || output="${output}  > there are unstaged changes\n"
+  git diff --quiet --cached --exit-code || output="${output}  > there are staged changes\n"
+
+
+  if [[ -n "$output" ]]; then
+    echo "$dir"
+    echo -en "${output}"
+  fi
+  popd > /dev/null
+}
+
+echo "To check if the data is available upstream I have to update all remotes. This"
+echo "might lose data if:"
+echo "  - the remote has received a force push removing commits"
+echo "  - your local has only a remote branch referencing those commits, not a"
+echo "    personal branch"
+echo "  - the actions cause a git garbage collect"
+echo ""
+echo "Usually this is not a problem, but you might want to check with your co-"
+echo "workers if none of them is in the middle of repairing a force push gone wrong"
+echo ""
+echo "Is it okay if I update all remotes? [YN]"
+read canupdate
+if [ "$canupdate" != "Y" -a "$canupdate" != "y" ]; then
+  echo "Okay, i won't refresh the data"
+  canupdate=
+else
+  canupdate="y"
+fi
+
+export check_changes
+
+find ./ -name '.git' | while IFS= read -r dir; do
+  check_changes "$dir"
+done
+
+echo "$has_local_changes"
+
+if [[ -n "$has_local_changes" ]]; then
+  exit 1
+fi
